@@ -9,6 +9,8 @@ interface marketImage {
   fileName: string,
   url: string,
   file: File
+  w: number,
+  h: number
 }
 
 interface skinsJson {
@@ -34,11 +36,17 @@ interface manifestJson {
 }
 
 
+let keyArt = reactive({}) as marketImage
+let keyArtHD = reactive({}) as marketImage
+let partnerArt = reactive({}) as marketImage
+
 const pack_name = ref("Skinpack")
 let isPackaging = ref(false)
 let drag = ref(false)
+
 let skins = reactive<Array<{ name: string, type: "custom" | "customSlim", fileName: string, url: string, file: File }>>([])
-let keyArt = <marketImage>{}
+let storeImages = reactive<Array<marketImage>>([])
+let inputImages = reactive<Array<File>>([])
 
 async function packageSkins() {
   try {
@@ -89,6 +97,9 @@ function generateZip() {
           type: "paid"
         })
       }
+      zip.file(`Content/Store Art/${packNameProccesed}_Thumbnail_0.jpg`, keyArt.file);
+      zip.file(`Content/Marketing Art/${packNameProccesed}_PartnerArt.jpg`, partnerArt.file);
+      zip.file(`Content/Marketing Art/${packNameProccesed}_MarketingKeyArt.jpg`, keyArtHD.file);
       zip.file('Content/skin_pack/skins.json', JSON.stringify(skinsJsonContent, null, 4));
       zip.file('Content/skin_pack/manifest.json', JSON.stringify(manifestJsonContent, null, 4));
       zip.file('Content/skin_pack/texts/en_US.lang', langFileContent);
@@ -120,18 +131,26 @@ async function sortImages(event: Event) {
           })
         } else if (val.type == "image/jpeg") {
           let size = await getImgSize(imgUrl)
+          storeImages.push({
+            file: val,
+            fileName: val.name,
+            url: imgUrl,
+            w: size.width,
+            h: size.height
+          })
           if (size.width == 800 && size.height == 450) {
-            keyArt.file = val,
-              keyArt.fileName = val.name,
-              keyArt.url = imgUrl
+            // keyArt.file = val, 
+            //   keyArt.fileName = val.name,
+            //   keyArt.url = imgUrl
           } else if (size.width == 1920 && size.height == 1080) {
-            console.log(val);
-
+            // console.log(val);
           }
         }
       }
+      inputImages = [];
       console.log(keyArt);
     } catch (error) {
+      inputImages = [];
       console.error(error);
 
     }
@@ -207,6 +226,45 @@ function getImgSize(src: string): Promise<{ width: number, height: number }> {
   })
 }
 
+function dragstart(event: DragEvent, item: marketImage) {
+  if ( event.dataTransfer != null) {
+    event.dataTransfer.dropEffect = 'move'
+    event.dataTransfer.effectAllowed = 'move'
+    event.dataTransfer.items.add(item.url, "image/url")
+  }
+}
+
+function onDrop(event: DragEvent, imgType: string){
+  if ( event.dataTransfer != null) {
+    let imgUrl = event.dataTransfer.getData("image/url")
+    let img = storeImages.find(img => img.url == imgUrl)
+    
+    if ( img != null ) {
+      switch (imgType) {
+        case "key_art":
+          if (img.w == 800 && img.h == 450){
+            Object.assign(keyArt, img)
+          }
+          break;
+        case "key_art_hd":
+          if (img.w == 1920 && img.h == 1080){
+            Object.assign(keyArtHD, img)
+          }
+          break;
+        case "partner_art":
+        if (img.w == 1920 && img.h == 1080){
+            Object.assign(partnerArt, img)
+          }
+          break;
+        default:
+          break;
+      }
+      // storeImages.splice(storeImages.indexOf(img), 1)
+    }
+  }
+  
+}
+
 </script>
 
 <template>
@@ -220,10 +278,57 @@ function getImgSize(src: string): Promise<{ width: number, height: number }> {
     <v-row>
       <v-col>
         <v-text-field variant="outlined" label="Skinpack name" v-model="pack_name"></v-text-field>
-        <v-file-input variant="outlined" label="Images" multiple accept="image/png, image/jpeg"
+        <v-file-input variant="outlined" label="Images" clearable multiple accept="image/png, image/jpeg" v-model="inputImages"
           @change="sortImages"></v-file-input>
       </v-col>
-    </v-row><v-row>
+    </v-row>
+    <v-row>
+      <v-col class="d-flex justify-center" v-for="img in storeImages">
+        <v-card draggable="true" @dragstart="dragstart($event, img)"  class="flex-grow-0 ma-5"> 
+          <v-card-subtitle>{{ `${img.fileName}  ${img.h}x${img.w}` }}</v-card-subtitle>
+          <v-img  width="450" :src="img.url"></v-img>
+        </v-card>
+      </v-col>
+    </v-row>
+    <v-row v-if="storeImages.length > 0" class="mx-10">
+      <v-col>
+        <v-card @drop="onDrop($event, 'key_art')" @dragenter.prevent @dragover.prevent> 
+          <v-card-title>Key Art (Tumbnail)</v-card-title>
+          <v-card-subtitle >800x450</v-card-subtitle>
+          <v-card-text class="d-flex">
+            <v-card class="flex-grow-1" v-if="keyArt.url">
+              <v-img :src="keyArt.url"></v-img>
+            </v-card>
+            <div class="drop-area flex-grow-1 pa-10 " v-else>Drag an image here</div>
+          </v-card-text>
+        </v-card>
+      </v-col>
+      <v-col>
+        <v-card @drop="onDrop($event, 'key_art_hd')" @dragenter.prevent @dragover.prevent> 
+          <v-card-title>Key Art HD</v-card-title>
+          <v-card-subtitle >1920x1080</v-card-subtitle>
+          <v-card-text class="d-flex">
+            <v-card class="flex-grow-1" v-if="keyArtHD.url">
+              <v-img :src="keyArtHD.url"></v-img>
+            </v-card>
+            <div class="drop-area flex-grow-1 pa-10"  v-else>Drag an image here</div>
+          </v-card-text>
+        </v-card>
+      </v-col>
+      <v-col>
+        <v-card @drop="onDrop($event, 'partner_art')" @dragenter.prevent @dragover.prevent> 
+          <v-card-title>Partner Art</v-card-title>
+          <v-card-subtitle >1920x1080</v-card-subtitle>
+          <v-card-text class="d-flex">
+            <v-card class="flex-grow-1" v-if="partnerArt.url">
+              <v-img :src="partnerArt.url"></v-img>
+            </v-card>
+            <div class="drop-area flex-grow-1 pa-10"  v-else>Drag an image here</div>
+          </v-card-text>
+        </v-card>
+      </v-col>
+    </v-row>
+    <v-row>
       <v-col cols="12">
         <draggable class="d-flex align-center justify-center row flex-wrap" ghost-class="moving-card" :list="skins"
           group="people" :animation="200" @start="drag = true" @end="drag = false" item-key="element.url">
@@ -254,5 +359,12 @@ function getImgSize(src: string): Promise<{ width: number, height: number }> {
   opacity: 0.5;
   background-color: gray;
   /* @apply opacity-50 bg-gray-100 border border-blue-500; */
+}
+
+.drop-area {
+  border: 4px dashed gray;
+  border-radius: 5px;
+  opacity: 0.6;
+  text-align: center;
 }
 </style>
