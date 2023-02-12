@@ -12,6 +12,8 @@
   "dependencies": {
     "file-saver": "^2.0.5",
     "jszip": "^3.10.1",
+    "three": "0.134",
+    "troisjs": "^0.3.4",
     "uuid": "^9.0.0",
     "vite-plugin-vuetify": "^1.0.2",
     "vue": "^3.2.45",
@@ -21,6 +23,7 @@
   "devDependencies": {
     "@mdi/font": "^7.1.96",
     "@types/file-saver": "^2.0.5",
+    "@types/three": "^0.149.0",
     "@types/uuid": "^9.0.0",
     "@vitejs/plugin-vue": "^4.0.0",
     "gh-pages": "^5.0.0",

@@ -2,8 +2,10 @@
 import { ref, reactive } from 'vue'
 import JSZip from 'jszip';
 import FileSaver from 'file-saver';
-import draggable from 'vuedraggable';
 import { v4 as uuidv4 } from 'uuid';
+
+import draggable from 'vuedraggable';
+import ModelViewer from './ModelViewer.vue'
 
 interface marketImage {
   fileName: string,
@@ -35,6 +37,8 @@ interface manifestJson {
   format_version: number
 }
 
+interface skin { name: string, type: "custom" | "customSlim", fileName: string, url: string, file: File }
+
 
 let keyArt = reactive({}) as marketImage
 let keyArtHD = reactive({}) as marketImage
@@ -43,8 +47,11 @@ let partnerArt = reactive({}) as marketImage
 const pack_name = ref("Skinpack")
 let isPackaging = ref(false)
 let drag = ref(false)
+let modelViewOpen = ref(false)
+let modelViewSkin = ref("")
+let modelViewType = ref("")
 
-let skins = reactive<Array<{ name: string, type: "custom" | "customSlim", fileName: string, url: string, file: File }>>([])
+let skins = reactive<Array<skin>>([])
 let storeImages = reactive<Array<marketImage>>([])
 let inputImages = reactive<Array<File>>([])
 
@@ -118,9 +125,20 @@ async function sortImages(event: Event) {
   let entries: File[] = []
   if (target && target.files) {
     try {
+      function readFile(file: File) {
+        return new Promise<string>((resolve, reject) => {
+          var fr = new FileReader();
+          fr.onload = () => {
+            resolve(String(fr.result))
+          };
+          fr.onerror = reject;
+          fr.readAsDataURL(file);
+        });
+      }
+
       entries = Object.values(target.files);
       for (const val of entries) {
-        let imgUrl = URL.createObjectURL(val)
+        let imgUrl = await readFile(val)
         if (val.type == "image/png") {
           skins.push({
             fileName: val.name,
@@ -148,7 +166,6 @@ async function sortImages(event: Event) {
         }
       }
       inputImages = [];
-      console.log(keyArt);
     } catch (error) {
       inputImages = [];
       console.error(error);
@@ -227,32 +244,32 @@ function getImgSize(src: string): Promise<{ width: number, height: number }> {
 }
 
 function dragstart(event: DragEvent, item: marketImage) {
-  if ( event.dataTransfer != null) {
+  if (event.dataTransfer != null) {
     event.dataTransfer.dropEffect = 'move'
     event.dataTransfer.effectAllowed = 'move'
     event.dataTransfer.items.add(item.url, "image/url")
   }
 }
 
-function onDrop(event: DragEvent, imgType: string){
-  if ( event.dataTransfer != null) {
+function onDrop(event: DragEvent, imgType: string) {
+  if (event.dataTransfer != null) {
     let imgUrl = event.dataTransfer.getData("image/url")
     let img = storeImages.find(img => img.url == imgUrl)
-    
-    if ( img != null ) {
+
+    if (img != null) {
       switch (imgType) {
         case "key_art":
-          if (img.w == 800 && img.h == 450){
+          if (img.w == 800 && img.h == 450) {
             Object.assign(keyArt, img)
           }
           break;
         case "key_art_hd":
-          if (img.w == 1920 && img.h == 1080){
+          if (img.w == 1920 && img.h == 1080) {
             Object.assign(keyArtHD, img)
           }
           break;
         case "partner_art":
-        if (img.w == 1920 && img.h == 1080){
+          if (img.w == 1920 && img.h == 1080) {
             Object.assign(partnerArt, img)
           }
           break;
@@ -262,7 +279,13 @@ function onDrop(event: DragEvent, imgType: string){
       // storeImages.splice(storeImages.indexOf(img), 1)
     }
   }
-  
+
+}
+
+function showModelView(skin: skin) {
+  modelViewOpen.value = true;
+  modelViewSkin.value = skin.url;
+  modelViewType.value = skin.type;
 }
 
 </script>
@@ -270,6 +293,10 @@ function onDrop(event: DragEvent, imgType: string){
 <template>
   <div class="flex-grow-1">
     <canvas hidden id="myCanvas"></canvas>
+    <model-viewer :show="modelViewOpen" @update:show="newValue => modelViewOpen = newValue"
+      :skin="modelViewSkin"
+      :type="modelViewType"
+      ></model-viewer>
     <v-row>
       <v-col>
         <h1>Skin Packager</h1>
@@ -278,23 +305,23 @@ function onDrop(event: DragEvent, imgType: string){
     <v-row>
       <v-col>
         <v-text-field variant="outlined" label="Skinpack name" v-model="pack_name"></v-text-field>
-        <v-file-input variant="outlined" label="Images" clearable multiple accept="image/png, image/jpeg" v-model="inputImages"
-          @change="sortImages"></v-file-input>
+        <v-file-input variant="outlined" label="Images" clearable multiple accept="image/png, image/jpeg"
+          v-model="inputImages" @change="sortImages"></v-file-input>
       </v-col>
     </v-row>
     <v-row>
       <v-col class="d-flex justify-center" v-for="img in storeImages">
-        <v-card draggable="true" @dragstart="dragstart($event, img)"  class="flex-grow-0 ma-5"> 
-          <v-card-subtitle>{{ `${img.fileName}  ${img.h}x${img.w}` }}</v-card-subtitle>
-          <v-img  width="450" :src="img.url"></v-img>
+        <v-card draggable="true" @dragstart="dragstart($event, img)" class="flex-grow-0 ma-5">
+          <v-card-subtitle>{{ `${img.fileName} ${img.h}x${img.w}` }}</v-card-subtitle>
+          <v-img width="450" :src="img.url"></v-img>
         </v-card>
       </v-col>
     </v-row>
     <v-row v-if="storeImages.length > 0" class="mx-10">
       <v-col>
-        <v-card @drop="onDrop($event, 'key_art')" @dragenter.prevent @dragover.prevent> 
+        <v-card @drop="onDrop($event, 'key_art')" @dragenter.prevent @dragover.prevent>
           <v-card-title>Key Art (Tumbnail)</v-card-title>
-          <v-card-subtitle >800x450</v-card-subtitle>
+          <v-card-subtitle>800x450</v-card-subtitle>
           <v-card-text class="d-flex">
             <v-card class="flex-grow-1" v-if="keyArt.url">
               <v-img :src="keyArt.url"></v-img>
@@ -304,26 +331,26 @@ function onDrop(event: DragEvent, imgType: string){
         </v-card>
       </v-col>
       <v-col>
-        <v-card @drop="onDrop($event, 'key_art_hd')" @dragenter.prevent @dragover.prevent> 
+        <v-card @drop="onDrop($event, 'key_art_hd')" @dragenter.prevent @dragover.prevent>
           <v-card-title>Key Art HD</v-card-title>
-          <v-card-subtitle >1920x1080</v-card-subtitle>
+          <v-card-subtitle>1920x1080</v-card-subtitle>
           <v-card-text class="d-flex">
             <v-card class="flex-grow-1" v-if="keyArtHD.url">
               <v-img :src="keyArtHD.url"></v-img>
             </v-card>
-            <div class="drop-area flex-grow-1 pa-10"  v-else>Drag an image here</div>
+            <div class="drop-area flex-grow-1 pa-10" v-else>Drag an image here</div>
           </v-card-text>
         </v-card>
       </v-col>
       <v-col>
-        <v-card @drop="onDrop($event, 'partner_art')" @dragenter.prevent @dragover.prevent> 
+        <v-card @drop="onDrop($event, 'partner_art')" @dragenter.prevent @dragover.prevent>
           <v-card-title>Partner Art</v-card-title>
-          <v-card-subtitle >1920x1080</v-card-subtitle>
+          <v-card-subtitle>1920x1080</v-card-subtitle>
           <v-card-text class="d-flex">
             <v-card class="flex-grow-1" v-if="partnerArt.url">
               <v-img :src="partnerArt.url"></v-img>
             </v-card>
-            <div class="drop-area flex-grow-1 pa-10"  v-else>Drag an image here</div>
+            <div class="drop-area flex-grow-1 pa-10" v-else>Drag an image here</div>
           </v-card-text>
         </v-card>
       </v-col>
@@ -336,6 +363,7 @@ function onDrop(event: DragEvent, imgType: string){
             <v-card rounded="lg" class="flex-grow-0 ma-5">
               <v-card-title>
                 {{ skins.indexOf(element) + "_" + element.type }}
+                <v-btn variant="flat" icon="mdi-video-3d" @click="showModelView(element)"></v-btn>
               </v-card-title>
               <v-text-field label="Character name" v-model="element.name"></v-text-field>
               <v-img width="300" :src="element.url"></v-img>
