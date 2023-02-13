@@ -40,7 +40,7 @@ function onReady(model: typeof Object3D) {
   if (camera.value != null){
     console.log(camera.value.camera);
 
-    // camera.value.camera.lookAt({x: 0, y: 10, z:0})
+    // camera.value.camera.lookAt({x: 0, y: 10, z:0}
     // camera.value.camera.autoRotate()
     // camera.value.camera.target = {x: 0, y: 10, z: 0};
   }

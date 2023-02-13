@@ -5,7 +5,9 @@ import FileSaver from 'file-saver';
 import { v4 as uuidv4 } from 'uuid';
 
 import draggable from 'vuedraggable';
-import ModelViewer from './ModelViewer.vue'
+// import ModelViewerDialog from './ModelViewerDialog.vue'
+import ModelViewerDialogNew from './ModelViewerDialogNew.vue'
+import ModelView from './ModelView.vue'
 
 interface marketImage {
   fileName: string,
@@ -94,19 +96,20 @@ function generateZip() {
       }
       const zip = new JSZip();
       for (const [i, skin] of skins.entries()) {
+        let skinFileNameLang = `${i + 1}_${skin.type}`
         let skinFileName = `${i + 1}_${skin.type}.png`
         await zip.file(`Content/skin_pack/${skinFileName}`, skin.file)
-        langFileContent += `\nskin.${packNameProccesed}.${skinFileName}=${skin.name}`
+        langFileContent += `\nskin.${packNameProccesed}.${skinFileNameLang}=${skin.name}`
         skinsJsonContent.skins.push({
-          localization_name: skinFileName,
-          geometry: `geometry.humanoid.${skinFileName}`,
-          texture: `${skinFileName}.png`,
+          localization_name: skinFileNameLang,
+          geometry: `geometry.humanoid.${skin.type}`,
+          texture: skinFileName,
           type: "paid"
         })
       }
-      zip.file(`Content/Store Art/${packNameProccesed}_Thumbnail_0.jpg`, keyArt.file);
-      zip.file(`Content/Marketing Art/${packNameProccesed}_PartnerArt.jpg`, partnerArt.file);
-      zip.file(`Content/Marketing Art/${packNameProccesed}_MarketingKeyArt.jpg`, keyArtHD.file);
+      zip.file(`Store Art/${packNameProccesed}_Thumbnail_0.jpg`, keyArt.file);
+      zip.file(`Marketing Art/${packNameProccesed}_PartnerArt.jpg`, partnerArt.file);
+      zip.file(`Marketing Art/${packNameProccesed}_MarketingKeyArt.jpg`, keyArtHD.file);
       zip.file('Content/skin_pack/skins.json', JSON.stringify(skinsJsonContent, null, 4));
       zip.file('Content/skin_pack/manifest.json', JSON.stringify(manifestJsonContent, null, 4));
       zip.file('Content/skin_pack/texts/en_US.lang', langFileContent);
@@ -293,10 +296,14 @@ function showModelView(skin: skin) {
 <template>
   <div class="flex-grow-1">
     <canvas hidden id="myCanvas"></canvas>
-    <model-viewer :show="modelViewOpen" @update:show="newValue => modelViewOpen = newValue"
+    <model-viewer-dialog-new eager :show="modelViewOpen" @update:show="val => modelViewOpen = val"
       :skin="modelViewSkin"
       :type="modelViewType"
-      ></model-viewer>
+      ></model-viewer-dialog-new>
+    <!-- <model-viewer-dialog :show="modelViewOpen" @update:show="val => modelViewOpen = val"
+      :skin="modelViewSkin"
+      :type="modelViewType"
+      ></model-viewer-dialog> -->
     <v-row>
       <v-col>
         <h1>Skin Packager</h1>
@@ -362,11 +369,12 @@ function showModelView(skin: skin) {
           <template #item="{ element }">
             <v-card rounded="lg" class="flex-grow-0 ma-5">
               <v-card-title>
-                {{ skins.indexOf(element) + "_" + element.type }}
+                {{ (skins.indexOf(element) + 1) + "_" + element.type }}
                 <v-btn variant="flat" icon="mdi-video-3d" @click="showModelView(element)"></v-btn>
               </v-card-title>
               <v-text-field label="Character name" v-model="element.name"></v-text-field>
               <v-img width="300" :src="element.url"></v-img>
+              <!-- <model-view :type="element.type" :skin="element.url"></model-view> -->
             </v-card>
           </template>
         </draggable>
