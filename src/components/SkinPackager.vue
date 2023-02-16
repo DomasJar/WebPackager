@@ -5,8 +5,7 @@ import FileSaver from 'file-saver';
 import { v4 as uuidv4 } from 'uuid';
 
 import draggable from 'vuedraggable';
-// import ModelViewerDialog from './ModelViewerDialog.vue'
-import ModelViewerDialogNew from './ModelViewerDialogNew.vue'
+import ModelViewerDialog from './ModelViewerDialog.vue'
 import ModelView from './ModelView.vue'
 
 interface marketImage {
@@ -291,23 +290,24 @@ function showModelView(skin: skin) {
   modelViewType.value = skin.type;
 }
 
+function removeSkin(skin: skin) {
+  skins.splice(skins.indexOf(skin), 1)
+}
+
 </script>
 
 <template>
   <div class="flex-grow-1">
     <canvas hidden id="myCanvas"></canvas>
-    <model-viewer-dialog-new eager :show="modelViewOpen" @update:show="val => modelViewOpen = val"
+    <model-viewer-dialog eager :show="modelViewOpen" @update:show="val => modelViewOpen = val"
       :skin="modelViewSkin"
       :type="modelViewType"
-      ></model-viewer-dialog-new>
-    <!-- <model-viewer-dialog :show="modelViewOpen" @update:show="val => modelViewOpen = val"
-      :skin="modelViewSkin"
-      :type="modelViewType"
-      ></model-viewer-dialog> -->
+      ></model-viewer-dialog>
     <v-row>
       <v-col>
         <h1>Skin Packager</h1>
       </v-col>
+      
     </v-row>
     <v-row>
       <v-col>
@@ -319,7 +319,7 @@ function showModelView(skin: skin) {
     <v-row>
       <v-col class="d-flex justify-center" v-for="img in storeImages">
         <v-card draggable="true" @dragstart="dragstart($event, img)" class="flex-grow-0 ma-5">
-          <v-card-subtitle>{{ `${img.fileName} ${img.h}x${img.w}` }}</v-card-subtitle>
+          <v-card-subtitle>{{ `${img.fileName} ${img.w}x${img.h}` }}</v-card-subtitle>
           <v-img width="450" :src="img.url"></v-img>
         </v-card>
       </v-col>
@@ -367,15 +367,15 @@ function showModelView(skin: skin) {
         <draggable class="d-flex align-center justify-center row flex-wrap" ghost-class="moving-card" :list="skins"
           group="people" :animation="200" @start="drag = true" @end="drag = false" item-key="element.url">
           <template #item="{ element }">
-            <v-card rounded="lg" class="flex-grow-0 ma-5">
-              <v-card-title>
-                {{ (skins.indexOf(element) + 1) + "_" + element.type }}
-                <v-btn variant="flat" icon="mdi-video-3d" @click="showModelView(element)"></v-btn>
-              </v-card-title>
-              <v-text-field label="Character name" v-model="element.name"></v-text-field>
-              <v-img width="300" :src="element.url"></v-img>
-              <!-- <model-view :type="element.type" :skin="element.url"></model-view> -->
-            </v-card>
+              <v-card rounded="lg" class="flex-grow-0 ma-5" :key="element.url">
+                <v-card-title class="d-flex align-center justify-space-between">
+                  {{ (skins.indexOf(element) + 1) + "_" + element.type }}
+                  <v-btn variant="flat" icon="mdi-video-3d" @click="showModelView(element)"></v-btn>
+                  <v-btn variant="flat" icon="mdi-delete" @click="removeSkin(element)"></v-btn>
+                </v-card-title>
+                <v-text-field label="Character name" v-model="element.name"></v-text-field>
+                <model-view v-bind:type="element.type" v-bind:skin="element.url"></model-view >
+              </v-card>
           </template>
         </draggable>
       </v-col>
@@ -402,5 +402,15 @@ function showModelView(skin: skin) {
   border-radius: 5px;
   opacity: 0.6;
   text-align: center;
+}
+
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.5s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
 }
 </style>

@@ -1,12 +1,11 @@
 <script setup lang="ts">
-import SkinPackager from './components/SkinPackager.vue'
 </script>
 
 <template>
   <v-app>
     <v-main>
-      <v-container class="d-flex">
-        <SkinPackager/>
+      <v-container class="d-flex fill-height justify-center" >
+        <router-view></router-view>
       </v-container>
     </v-main>
   </v-app>
