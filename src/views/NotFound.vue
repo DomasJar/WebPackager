@@ -1,8 +1,4 @@
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
-
-import { auth } from '../firebase';
-import { signInWithEmailAndPassword } from "firebase/auth";
 
 
 </script>

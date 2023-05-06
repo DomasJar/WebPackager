@@ -38,7 +38,7 @@ interface manifestJson {
   format_version: number
 }
 
-interface skin { name: string, type: "custom" | "customSlim", fileName: string, url: string, file: File }
+interface skin { name: string, type: "custom" | "customSlim", fileName: string, url: string, file: File, paid: true }
 
 
 let keyArt = reactive({}) as marketImage
@@ -46,6 +46,7 @@ let keyArtHD = reactive({}) as marketImage
 let partnerArt = reactive({}) as marketImage
 
 const pack_name = ref("Skinpack")
+const pack_version = ref("1.0.0")
 let isPackaging = ref(false)
 let drag = ref(false)
 let modelViewOpen = ref(false)
@@ -71,6 +72,9 @@ async function packageSkins() {
 function generateZip() {
   return new Promise<Blob>(async (resolve, reject) => {
     try {
+      let ver_digits = pack_version.value.split(".").map((item) => {
+          return parseInt(item, 10);
+      });
       let packNameProccesed = pack_name.value.trim().replace(" ", "");
       let langFileContent = `skinpack.${packNameProccesed}=${pack_name.value}`;
       let skinsJsonContent: skinsJson = {
@@ -82,13 +86,13 @@ function generateZip() {
         format_version: 1,
         header: {
           name: "pack.name",
-          version: [1, 0, 0],
+          version: [ver_digits[0], ver_digits[1], ver_digits[2]],
           uuid: uuidv4()
         },
         modules: [
           {
             type: "skin_pack",
-            version: [1, 0, 0],
+            version: [ver_digits[0], ver_digits[1], ver_digits[2]],
             uuid: uuidv4()
           }
         ]
@@ -103,7 +107,7 @@ function generateZip() {
           localization_name: skinFileNameLang,
           geometry: `geometry.humanoid.${skin.type}`,
           texture: skinFileName,
-          type: "paid"
+          type: skin.paid ? "paid" : "free",
         })
       }
       zip.file(`Store Art/${packNameProccesed}_Thumbnail_0.jpg`, keyArt.file);
@@ -147,7 +151,8 @@ async function sortImages(event: Event) {
             name: val.name.replace(/\.[^/.]+$/, ""),
             url: imgUrl,
             file: val,
-            type: await getSkinType(imgUrl)
+            type: await getSkinType(imgUrl),
+            paid: true
           })
         } else if (val.type == "image/jpeg") {
           let size = await getImgSize(imgUrl)
@@ -177,22 +182,22 @@ async function sortImages(event: Event) {
   }
 }
 
-async function displayskins(event: Event) {
-  const target = (<HTMLInputElement>event.target)
-  let entries: File[] = []
-  if (target && target.files) {
-    entries = Object.values(target.files);
-    for (const val of entries) {
-      skins.push({
-        fileName: val.name,
-        name: val.name.replace(/\.[^/.]+$/, ""),
-        url: URL.createObjectURL(val),
-        file: val,
-        type: await getSkinType(URL.createObjectURL(val))
-      })
-    }
-  }
-}
+// async function displayskins(event: Event) {
+//   const target = (<HTMLInputElement>event.target)
+//   let entries: File[] = []
+//   if (target && target.files) {
+//     entries = Object.values(target.files);
+//     for (const val of entries) {
+//       skins.push({
+//         fileName: val.name,
+//         name: val.name.replace(/\.[^/.]+$/, ""),
+//         url: URL.createObjectURL(val),
+//         file: val,
+//         type: await getSkinType(URL.createObjectURL(val))
+//       })
+//     }
+//   }
+// }
 
 function getSkinType(imageUrl: string): Promise<"custom" | "customSlim"> {
   return new Promise(async (resolve, reject) => {
@@ -261,17 +266,17 @@ function onDrop(event: DragEvent, imgType: string) {
     if (img != null) {
       switch (imgType) {
         case "key_art":
-          if (img.w == 800 && img.h == 450) {
+          if (img.w == 800 && img.h == 450 && img.file.type == "image/jpeg") {
             Object.assign(keyArt, img)
           }
           break;
         case "key_art_hd":
-          if (img.w == 1920 && img.h == 1080) {
+          if (img.w == 1920 && img.h == 1080 && img.file.type == "image/jpeg") {
             Object.assign(keyArtHD, img)
           }
           break;
         case "partner_art":
-          if (img.w == 1920 && img.h == 1080) {
+          if (img.w == 1920 && img.h == 1080 && img.file.type == "image/jpeg") {
             Object.assign(partnerArt, img)
           }
           break;
@@ -310,8 +315,13 @@ function removeSkin(skin: skin) {
       
     </v-row>
     <v-row>
-      <v-col>
-        <v-text-field variant="outlined" label="Skinpack name" v-model="pack_name"></v-text-field>
+      <v-col >
+        <v-text-field  variant="outlined" label="Skinpack name" v-model="pack_name"></v-text-field>
+      </v-col>
+      <v-col >
+        <v-text-field variant="outlined" label="Version" v-model="pack_version"></v-text-field>
+      </v-col>
+      <v-col >
         <v-file-input variant="outlined" label="Images" clearable multiple accept="image/png, image/jpeg"
           v-model="inputImages" @change="sortImages"></v-file-input>
       </v-col>
@@ -327,7 +337,7 @@ function removeSkin(skin: skin) {
     <v-row v-if="storeImages.length > 0" class="mx-10">
       <v-col>
         <v-card @drop="onDrop($event, 'key_art')" @dragenter.prevent @dragover.prevent>
-          <v-card-title>Key Art (Tumbnail)</v-card-title>
+          <v-card-title>Store Art</v-card-title>
           <v-card-subtitle>800x450</v-card-subtitle>
           <v-card-text class="d-flex">
             <v-card class="flex-grow-1" v-if="keyArt.url">
@@ -339,7 +349,7 @@ function removeSkin(skin: skin) {
       </v-col>
       <v-col>
         <v-card @drop="onDrop($event, 'key_art_hd')" @dragenter.prevent @dragover.prevent>
-          <v-card-title>Key Art HD</v-card-title>
+          <v-card-title>Marketing Art</v-card-title>
           <v-card-subtitle>1920x1080</v-card-subtitle>
           <v-card-text class="d-flex">
             <v-card class="flex-grow-1" v-if="keyArtHD.url">
@@ -370,10 +380,11 @@ function removeSkin(skin: skin) {
               <v-card rounded="lg" class="flex-grow-0 ma-5" :key="element.url">
                 <v-card-title class="d-flex align-center justify-space-between">
                   {{ (skins.indexOf(element) + 1) + "_" + element.type }}
-                  <v-btn variant="flat" icon="mdi-video-3d" @click="showModelView(element)"></v-btn>
+                  <v-btn variant="flat" icon="mdi-magnify-plus" @click="showModelView(element)"></v-btn>
                   <v-btn variant="flat" icon="mdi-delete" @click="removeSkin(element)"></v-btn>
                 </v-card-title>
                 <v-text-field label="Character name" v-model="element.name"></v-text-field>
+                
                 <model-view v-bind:type="element.type" v-bind:skin="element.url"></model-view >
               </v-card>
           </template>
