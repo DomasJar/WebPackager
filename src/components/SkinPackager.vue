@@ -61,7 +61,7 @@ async function packageSkins() {
   try {
     isPackaging.value = true;
     let content = await generateZip()
-    FileSaver.saveAs(content, `${pack_name.value.replace(" ", "")}.zip`);
+    FileSaver.saveAs(content, `${pack_name.value.replaceAll(" ", "")}.zip`);
     isPackaging.value = false;
   } catch (error) {
     console.log(error);
@@ -75,7 +75,7 @@ function generateZip() {
       let ver_digits = pack_version.value.split(".").map((item) => {
           return parseInt(item, 10);
       });
-      let packNameProccesed = pack_name.value.trim().replace(" ", "");
+      let packNameProccesed = pack_name.value.trim().replaceAll(" ", "");
       let langFileContent = `skinpack.${packNameProccesed}=${pack_name.value}`;
       let skinsJsonContent: skinsJson = {
         localization_name: packNameProccesed,
