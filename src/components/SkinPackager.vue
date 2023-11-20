@@ -73,7 +73,7 @@ function generateZip() {
   return new Promise<Blob>(async (resolve, reject) => {
     try {
       let ver_digits = pack_version.value.split(".").map((item) => {
-          return parseInt(item, 10);
+        return parseInt(item, 10);
       });
       let packNameProccesed = pack_name.value.trim().replaceAll(" ", "");
       let langFileContent = `skinpack.${packNameProccesed}=${pack_name.value}`;
@@ -163,6 +163,7 @@ async function sortImages(event: Event) {
             w: size.width,
             h: size.height
           })
+
           if (size.width == 800 && size.height == 450) {
             // keyArt.file = val, 
             //   keyArt.fileName = val.name,
@@ -236,6 +237,31 @@ function getSkinType(imageUrl: string): Promise<"custom" | "customSlim"> {
   })
 }
 
+function resizeImg(imgFile: File, src: string, width: number, height: number): Promise<{ newImgFile: File, imgUrl: string }> {
+  return new Promise(async (resolve, reject) => {
+    const newImg = new Image();
+
+    newImg.onload = async function () {
+      var canvas = document.createElement("canvas");
+      var ctx = canvas.getContext("2d");
+      if (!ctx) return reject();
+      canvas.width = width;
+      canvas.height = height;
+
+      ctx.drawImage(newImg, 0, 0, width, height);
+      const dataUrl = canvas.toDataURL(imgFile.type);
+      const newImgBlob = await new Promise((resolve: BlobCallback) => {
+        canvas.toBlob(resolve, imgFile.type); 
+      });
+      if (!newImgBlob) return reject();
+      var newImgFile = new File([newImgBlob], `resized_${imgFile.name}`, {type: imgFile.type});
+      resolve({ newImgFile: newImgFile, imgUrl: dataUrl });
+    };
+
+    newImg.src = src; // this must be done AFTER setting onload
+  })
+}
+
 function getImgSize(src: string): Promise<{ width: number, height: number }> {
   return new Promise(async (resolve, reject) => {
     const newImg = new Image();
@@ -258,21 +284,30 @@ function dragstart(event: DragEvent, item: marketImage) {
   }
 }
 
-function onDrop(event: DragEvent, imgType: string) {
+async function onDrop(event: DragEvent, imgType: string) {
   if (event.dataTransfer != null) {
     let imgUrl = event.dataTransfer.getData("image/url")
     let img = storeImages.find(img => img.url == imgUrl)
 
     if (img != null) {
       switch (imgType) {
-        case "key_art":
-          if (img.w == 800 && img.h == 450 && img.file.type == "image/jpeg") {
-            Object.assign(keyArt, img)
-          }
-          break;
+        // case "key_art":
+        //   if (img.w == 800 && img.h == 450 && img.file.type == "image/jpeg") {
+        //     Object.assign(keyArt, img)
+        //   }
+        //   break;
         case "key_art_hd":
           if (img.w == 1920 && img.h == 1080 && img.file.type == "image/jpeg") {
-            Object.assign(keyArtHD, img)
+            var scaled_image = await resizeImg(img.file, img.url, 800, 450);
+            var keyartImg = {
+              file: scaled_image.newImgFile,
+              fileName: scaled_image.newImgFile.name,
+              url: scaled_image.imgUrl,
+              w: 800,
+              h: 450
+            };
+            Object.assign(keyArt, keyartImg);
+            Object.assign(keyArtHD, img);
           }
           break;
         case "partner_art":
@@ -304,24 +339,22 @@ function removeSkin(skin: skin) {
 <template>
   <div class="flex-grow-1">
     <canvas hidden id="myCanvas"></canvas>
-    <model-viewer-dialog eager :show="modelViewOpen" @update:show="val => modelViewOpen = val"
-      :skin="modelViewSkin"
-      :type="modelViewType"
-      ></model-viewer-dialog>
+    <model-viewer-dialog eager :show="modelViewOpen" @update:show="val => modelViewOpen = val" :skin="modelViewSkin"
+      :type="modelViewType"></model-viewer-dialog>
     <v-row>
       <v-col>
         <h1>Skin Packager</h1>
       </v-col>
-      
+
     </v-row>
     <v-row>
-      <v-col >
-        <v-text-field  variant="outlined" label="Skinpack name" v-model="pack_name"></v-text-field>
+      <v-col>
+        <v-text-field variant="outlined" label="Skinpack name" v-model="pack_name"></v-text-field>
       </v-col>
-      <v-col >
+      <v-col>
         <v-text-field variant="outlined" label="Version" v-model="pack_version"></v-text-field>
       </v-col>
-      <v-col >
+      <v-col>
         <v-file-input variant="outlined" label="Images" clearable multiple accept="image/png, image/jpeg"
           v-model="inputImages" @change="sortImages"></v-file-input>
       </v-col>
@@ -377,16 +410,16 @@ function removeSkin(skin: skin) {
         <draggable class="d-flex align-center justify-center row flex-wrap" ghost-class="moving-card" :list="skins"
           group="people" :animation="200" @start="drag = true" @end="drag = false" item-key="element.url">
           <template #item="{ element }">
-              <v-card rounded="lg" class="flex-grow-0 ma-5" :key="element.url">
-                <v-card-title class="d-flex align-center justify-space-between">
-                  {{ (skins.indexOf(element) + 1) + "_" + element.type }}
-                  <v-btn variant="flat" icon="mdi-magnify-plus" @click="showModelView(element)"></v-btn>
-                  <v-btn variant="flat" icon="mdi-delete" @click="removeSkin(element)"></v-btn>
-                </v-card-title>
-                <v-text-field label="Character name" v-model="element.name"></v-text-field>
-                
-                <model-view v-bind:type="element.type" v-bind:skin="element.url"></model-view >
-              </v-card>
+            <v-card rounded="lg" class="flex-grow-0 ma-5" :key="element.url">
+              <v-card-title class="d-flex align-center justify-space-between">
+                {{ (skins.indexOf(element) + 1) + "_" + element.type }}
+                <v-btn variant="flat" icon="mdi-magnify-plus" @click="showModelView(element)"></v-btn>
+                <v-btn variant="flat" icon="mdi-delete" @click="removeSkin(element)"></v-btn>
+              </v-card-title>
+              <v-text-field label="Character name" v-model="element.name"></v-text-field>
+
+              <model-view v-bind:type="element.type" v-bind:skin="element.url"></model-view>
+            </v-card>
           </template>
         </draggable>
       </v-col>
