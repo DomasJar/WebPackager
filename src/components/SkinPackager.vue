@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
+import { ref, reactive, onBeforeMount } from 'vue'
 import JSZip from 'jszip';
 import FileSaver from 'file-saver';
 import { v4 as uuidv4 } from 'uuid';
@@ -47,15 +47,27 @@ let partnerArt = reactive({}) as marketImage
 
 const pack_name = ref("Skinpack")
 const pack_version = ref("1.0.0")
+const keyArtInput = ref(null)
 let isPackaging = ref(false)
 let drag = ref(false)
 let modelViewOpen = ref(false)
 let modelViewSkin = ref("")
 let modelViewType = ref("")
 
+
 let skins = reactive<Array<skin>>([])
 let storeImages = reactive<Array<marketImage>>([])
 let inputImages = reactive<Array<File>>([])
+
+onBeforeMount(async () => {
+  var storedArt = localStorage.getItem('partner_art');
+  if (storedArt) {
+    var partnerArtImg = JSON.parse(storedArt);
+    partnerArtImg.file = dataURLtoFile(partnerArtImg.url, partnerArtImg.fileName);
+    Object.assign(partnerArt, partnerArtImg);
+  }
+
+})
 
 async function packageSkins() {
   try {
@@ -251,10 +263,10 @@ function resizeImg(imgFile: File, src: string, width: number, height: number): P
       ctx.drawImage(newImg, 0, 0, width, height);
       const dataUrl = canvas.toDataURL(imgFile.type);
       const newImgBlob = await new Promise((resolve: BlobCallback) => {
-        canvas.toBlob(resolve, imgFile.type); 
+        canvas.toBlob(resolve, imgFile.type);
       });
       if (!newImgBlob) return reject();
-      var newImgFile = new File([newImgBlob], `resized_${imgFile.name}`, {type: imgFile.type});
+      var newImgFile = new File([newImgBlob], `resized_${imgFile.name}`, { type: imgFile.type });
       resolve({ newImgFile: newImgFile, imgUrl: dataUrl });
     };
 
@@ -286,16 +298,19 @@ function dragstart(event: DragEvent, item: marketImage) {
 
 async function onDrop(event: DragEvent, imgType: string) {
   if (event.dataTransfer != null) {
-    let imgUrl = event.dataTransfer.getData("image/url")
-    let img = storeImages.find(img => img.url == imgUrl)
+    let imgUrl = event.dataTransfer.getData("image/url");
+    let img = storeImages.find(img => img.url == imgUrl);
+    if (!img && event.dataTransfer.files.length > 0) {
+      img = await fileToImg(event.dataTransfer.files[0]);
+    }
 
     if (img != null) {
       switch (imgType) {
-        // case "key_art":
-        //   if (img.w == 800 && img.h == 450 && img.file.type == "image/jpeg") {
-        //     Object.assign(keyArt, img)
-        //   }
-        //   break;
+        case "key_art":
+          if (img.w == 800 && img.h == 450 && img.file.type == "image/jpeg") {
+            Object.assign(keyArt, img)
+          }
+          break;
         case "key_art_hd":
           if (img.w == 1920 && img.h == 1080 && img.file.type == "image/jpeg") {
             var scaled_image = await resizeImg(img.file, img.url, 800, 450);
@@ -312,7 +327,8 @@ async function onDrop(event: DragEvent, imgType: string) {
           break;
         case "partner_art":
           if (img.w == 1920 && img.h == 1080 && img.file.type == "image/jpeg") {
-            Object.assign(partnerArt, img)
+            Object.assign(partnerArt, img);
+            localStorage.setItem('partner_art', JSON.stringify(img))
           }
           break;
         default:
@@ -322,6 +338,115 @@ async function onDrop(event: DragEvent, imgType: string) {
     }
   }
 
+}
+
+async function fileToImg(file: File): Promise<marketImage> {
+  return new Promise(async (resolve, reject) => {
+    try {
+      function readFile(file: File) {
+        return new Promise<string>((resolve, reject) => {
+          var fr = new FileReader();
+          fr.onload = () => {
+            resolve(String(fr.result));
+          };
+          fr.onerror = reject;
+          fr.readAsDataURL(file);
+        });
+      }
+
+      let imgUrl = await readFile(file)
+      let size = await getImgSize(imgUrl);
+      var img = {
+        file: file,
+        fileName: file.name,
+        url: imgUrl,
+        w: size.width,
+        h: size.height
+      };
+      resolve(img)
+
+    } catch (error) {
+      reject(error)
+    }
+  })
+}
+
+async function handleFileChange(event: Event, inputType: string) {
+  const target = (<HTMLInputElement>event.target)
+
+  let entries: File[] = []
+  if (target && target.files) {
+    try {
+      function readFile(file: File) {
+        return new Promise<string>((resolve, reject) => {
+          var fr = new FileReader();
+          fr.onload = () => {
+            resolve(String(fr.result));
+          };
+          fr.onerror = reject;
+          fr.readAsDataURL(file);
+        });
+      }
+
+      entries = Object.values(target.files);
+      for (const val of entries) {
+        let imgUrl = await readFile(val)
+        let size = await getImgSize(imgUrl);
+        switch (inputType) {
+          case 'key_art_hd':
+            if (size.width != 1920 || size.height != 1080) break
+            var keyartHDImg = {
+              file: val,
+              fileName: val.name,
+              url: imgUrl,
+              w: size.width,
+              h: size.height
+            };
+            Object.assign(keyArtHD, keyartHDImg);
+
+            var scaled_image = await resizeImg(keyartHDImg.file, keyartHDImg.url, 800, 450);
+            var keyartImg = {
+              file: scaled_image.newImgFile,
+              fileName: scaled_image.newImgFile.name,
+              url: scaled_image.imgUrl,
+              w: 800,
+              h: 450
+            };
+            Object.assign(keyArt, keyartImg);
+            break;
+          case 'partner_art':
+            if (size.width != 1920 || size.height != 1080) break
+            var partnerImg = {
+              file: val,
+              fileName: val.name,
+              url: imgUrl,
+              w: size.width,
+              h: size.height
+            };
+            Object.assign(partnerArt, partnerImg);
+            break;
+
+          default:
+            break;
+        }
+      }
+    } catch (error) {
+      console.error(error);
+
+    }
+  }
+}
+
+function dataURLtoFile(dataurl: string, filename: string) {
+  var arr = dataurl.split(',');
+  var mime = typeof arr[0] === "string" ? arr[0].match(/:(.*?);/)[1] : '';
+  var bstr = atob(arr[arr.length - 1]);
+  var n = bstr.length;
+  var u8arr = new Uint8Array(n);
+  while (n--) {
+    u8arr[n] = bstr.charCodeAt(n);
+  }
+  return new File([u8arr], filename, { type: mime });
 }
 
 function showModelView(skin: skin) {
@@ -337,7 +462,7 @@ function removeSkin(skin: skin) {
 </script>
 
 <template>
-  <div class="flex-grow-1">
+  <div @drop.stop.prevent class="flex-grow-1">
     <canvas hidden id="myCanvas"></canvas>
     <model-viewer-dialog eager :show="modelViewOpen" @update:show="val => modelViewOpen = val" :skin="modelViewSkin"
       :type="modelViewType"></model-viewer-dialog>
@@ -367,7 +492,7 @@ function removeSkin(skin: skin) {
         </v-card>
       </v-col>
     </v-row>
-    <v-row v-if="storeImages.length > 0" class="mx-10">
+    <v-row class="mx-10">
       <v-col>
         <v-card @drop="onDrop($event, 'key_art')" @dragenter.prevent @dragover.prevent>
           <v-card-title>Store Art</v-card-title>
@@ -381,7 +506,9 @@ function removeSkin(skin: skin) {
         </v-card>
       </v-col>
       <v-col>
-        <v-card @drop="onDrop($event, 'key_art_hd')" @dragenter.prevent @dragover.prevent>
+        <input ref="keyArtInput" class="d-none" type="file" accept="image/png, image/jpeg"
+          @change="handleFileChange($event, 'key_art_hd')" />
+        <v-card @drop.prevent="onDrop($event, 'key_art_hd')" @dragenter.prevent @dragover.prevent>
           <v-card-title>Marketing Art</v-card-title>
           <v-card-subtitle>1920x1080</v-card-subtitle>
           <v-card-text class="d-flex">
@@ -393,7 +520,9 @@ function removeSkin(skin: skin) {
         </v-card>
       </v-col>
       <v-col>
-        <v-card @drop="onDrop($event, 'partner_art')" @dragenter.prevent @dragover.prevent>
+        <input ref="partnerArtInput" class="d-none" type="file" accept="image/png, image/jpeg"
+          @change="handleFileChange($event, 'partner_art')" />
+        <v-card @drop.prevent="onDrop($event, 'partner_art')" @dragenter.prevent @dragover.prevent>
           <v-card-title>Partner Art</v-card-title>
           <v-card-subtitle>1920x1080</v-card-subtitle>
           <v-card-text class="d-flex">
