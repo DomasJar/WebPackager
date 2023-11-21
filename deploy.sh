@@ -4,7 +4,7 @@
 set -e
 
 # build
-npm run build
+yarn build
 
 # navigate into the build output directory
 cd dist
@@ -27,3 +27,5 @@ git commit -m 'deploy'
 git push -f https://github.com/DomasJar/WebPackager.git main:gh-pages
 
 cd -
+
+$SHELL

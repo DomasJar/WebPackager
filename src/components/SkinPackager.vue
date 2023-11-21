@@ -439,7 +439,11 @@ async function handleFileChange(event: Event, inputType: string) {
 
 function dataURLtoFile(dataurl: string, filename: string) {
   var arr = dataurl.split(',');
-  var mime = typeof arr[0] === "string" ? arr[0].match(/:(.*?);/)[1] : '';
+  
+  if (arr.length > 0 && arr[0] != null) {
+    var mimeRaw = arr[0].match(/:(.*?);/)
+    var mime = mimeRaw != null && mimeRaw.length > 1? mimeRaw[1] : '' ;
+  } else return {}
   var bstr = atob(arr[arr.length - 1]);
   var n = bstr.length;
   var u8arr = new Uint8Array(n);
