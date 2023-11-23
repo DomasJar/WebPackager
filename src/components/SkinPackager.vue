@@ -139,7 +139,8 @@ function generateZip() {
 }
 
 async function sortImages(event: Event) {
-  const target = (<HTMLInputElement>event.target)
+  const target = (<HTMLInputElement>event.target);
+
   let entries: File[] = []
   if (target && target.files) {
     try {
@@ -304,15 +305,32 @@ async function onDrop(event: DragEvent, imgType: string) {
       img = await fileToImg(event.dataTransfer.files[0]);
     }
 
+    
+
     if (img != null) {
+      if (img.file.type != "image/jpeg" && img.file.type != "image/png") {
+        console.log(`Error: Image format not supported - ${img.file.type}`);
+        return;
+      }
+
       switch (imgType) {
         case "key_art":
-          if (img.w == 800 && img.h == 450 && img.file.type == "image/jpeg") {
+          if (img.w == 800 && img.h == 450) {
+            if (img.file.type != 'image/jpeg'){
+              let newImg = await changeImgFormat(img.file, img.url);
+              img.file = newImg.newImgFile;
+              img.url = newImg.imgUrl;
+            }
             Object.assign(keyArt, img)
           }
           break;
         case "key_art_hd":
-          if (img.w == 1920 && img.h == 1080 && img.file.type == "image/jpeg") {
+          if (img.w == 1920 && img.h == 1080) {
+            if (img.file.type != 'image/jpeg'){
+              let newImg = await changeImgFormat(img.file, img.url);
+              img.file = newImg.newImgFile;
+              img.url = newImg.imgUrl;
+            }
             var scaled_image = await resizeImg(img.file, img.url, 800, 450);
             var keyartImg = {
               file: scaled_image.newImgFile,
@@ -326,7 +344,13 @@ async function onDrop(event: DragEvent, imgType: string) {
           }
           break;
         case "partner_art":
-          if (img.w == 1920 && img.h == 1080 && img.file.type == "image/jpeg") {
+          if (img.w == 1920 && img.h == 1080) {
+            
+            if (img.file.type != 'image/jpeg'){
+              let newImg = await changeImgFormat(img.file, img.url);
+              img.file = newImg.newImgFile;
+              img.url = newImg.imgUrl;
+            }
             Object.assign(partnerArt, img);
             localStorage.setItem('partner_art', JSON.stringify(img))
           }
@@ -368,6 +392,31 @@ async function fileToImg(file: File): Promise<marketImage> {
     } catch (error) {
       reject(error)
     }
+  })
+}
+
+function changeImgFormat(file: File, fileSrc: string, type: string = 'image/jpeg'): Promise<{newImgFile: File, imgUrl: string}> {
+  return new Promise(async (resolve, reject) => {
+    const newImg = new Image();
+
+    newImg.onload = async function () {
+      var canvas = document.createElement("canvas");
+      var ctx = canvas.getContext("2d");
+      if (!ctx) return reject();
+      canvas.width = newImg.width;
+      canvas.height = newImg.height;
+      ctx.drawImage(newImg, 0, 0);
+
+      const dataUrl = canvas.toDataURL(type);
+      const newImgBlob = await new Promise((resolve: BlobCallback) => {
+        canvas.toBlob(resolve,type);
+      });
+      if (!newImgBlob) return reject();
+      var newImgFile = new File([newImgBlob], `resized_${file.name}`, { type: type });
+      resolve({ newImgFile: newImgFile, imgUrl: dataUrl });
+    };
+
+    newImg.src = fileSrc; // this must be done AFTER setting onload
   })
 }
 
@@ -466,7 +515,7 @@ function removeSkin(skin: skin) {
 </script>
 
 <template>
-  <div @drop.stop.prevent class="flex-grow-1">
+  <div class="flex-grow-1">
     <canvas hidden id="myCanvas"></canvas>
     <model-viewer-dialog eager :show="modelViewOpen" @update:show="val => modelViewOpen = val" :skin="modelViewSkin"
       :type="modelViewType"></model-viewer-dialog>
@@ -485,7 +534,7 @@ function removeSkin(skin: skin) {
       </v-col>
       <v-col>
         <v-file-input variant="outlined" label="Images" clearable multiple accept="image/png, image/jpeg"
-          v-model="inputImages" @change="sortImages"></v-file-input>
+          v-model="inputImages" @change="sortImages($event)"></v-file-input>
       </v-col>
     </v-row>
     <v-row>
@@ -505,7 +554,7 @@ function removeSkin(skin: skin) {
             <v-card class="flex-grow-1" v-if="keyArt.url">
               <v-img :src="keyArt.url"></v-img>
             </v-card>
-            <div class="drop-area flex-grow-1 pa-10 " v-else>Drag an image here</div>
+            <div class="drop-area flex-grow-1 pa-10 " v-else>Auto-generated</div>
           </v-card-text>
         </v-card>
       </v-col>
