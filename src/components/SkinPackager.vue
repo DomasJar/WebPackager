@@ -73,7 +73,7 @@ async function packageSkins() {
   try {
     isPackaging.value = true;
     let content = await generateZip()
-    FileSaver.saveAs(content, `${pack_name.value.replaceAll(" ", "")}.zip`);
+    FileSaver.saveAs(content, `${pack_name.value.replaceAll(" ", "")}_${pack_version.value}.zip`);
     isPackaging.value = false;
   } catch (error) {
     console.log(error);
@@ -527,10 +527,10 @@ function removeSkin(skin: skin) {
     </v-row>
     <v-row>
       <v-col>
-        <v-text-field variant="outlined" label="Skinpack name" v-model="pack_name"></v-text-field>
+        <v-text-field variant="outlined" label="Skinpack name" v-model.trim="pack_name"></v-text-field>
       </v-col>
       <v-col>
-        <v-text-field variant="outlined" label="Version" v-model="pack_version"></v-text-field>
+        <v-text-field variant="outlined" label="Version" v-model.trim="pack_version"></v-text-field>
       </v-col>
       <v-col>
         <v-file-input variant="outlined" label="Images" clearable multiple accept="image/png, image/jpeg"
