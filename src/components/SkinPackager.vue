@@ -87,7 +87,8 @@ function generateZip() {
       let ver_digits = pack_version.value.split(".").map((item) => {
         return parseInt(item, 10);
       });
-      let packNameProccesed = pack_name.value.trim().replaceAll(new RegExp('([^\w ]| )'), "");
+      let packNameProccesed = pack_name.value.trim().replace(/([^\w]| )/g, "");
+      
       let langFileContent = `skinpack.${packNameProccesed}=${pack_name.value}`;
       let skinsJsonContent: skinsJson = {
         localization_name: packNameProccesed,
