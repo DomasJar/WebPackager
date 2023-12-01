@@ -87,7 +87,7 @@ function generateZip() {
       let ver_digits = pack_version.value.split(".").map((item) => {
         return parseInt(item, 10);
       });
-      let packNameProccesed = pack_name.value.trim().replaceAll(" ", "");
+      let packNameProccesed = pack_name.value.trim().replaceAll(new RegExp('([^\w ]| )'), "");
       let langFileContent = `skinpack.${packNameProccesed}=${pack_name.value}`;
       let skinsJsonContent: skinsJson = {
         localization_name: packNameProccesed,
@@ -171,19 +171,11 @@ async function sortImages(event: Event) {
           let size = await getImgSize(imgUrl)
           storeImages.push({
             file: val,
-            fileName: val.name,
+            fileName: val.name.replace(/\.[^/.]+$/, ""),
             url: imgUrl,
             w: size.width,
             h: size.height
           })
-
-          if (size.width == 800 && size.height == 450) {
-            // keyArt.file = val, 
-            //   keyArt.fileName = val.name,
-            //   keyArt.url = imgUrl
-          } else if (size.width == 1920 && size.height == 1080) {
-            // console.log(val);
-          }
         }
       }
       inputImages = [];
@@ -246,6 +238,47 @@ function getSkinType(imageUrl: string): Promise<"custom" | "customSlim"> {
       }
 
       resolve("customSlim")
+    };
+  })
+}
+
+function checkGhostPixels(imageUrl: string): Promise<boolean> {
+  return new Promise(async (resolve, reject) => {
+    let img = new (window as any).Image();
+    img.crossOrigin = `Anonymous`;
+
+    img.src = imageUrl;
+    img.onload = function () {
+
+      let canvas = document.getElementById("myCanvas") as HTMLCanvasElement;
+      canvas.width = img.width;
+      canvas.height = img.height;
+      let ctx: CanvasRenderingContext2D = canvas.getContext(
+        "2d"
+      ) as CanvasRenderingContext2D;
+      ctx.drawImage(img, 0, 0);
+
+      let resolutionMultiplier = img.height / 64;
+      let headData_1 = ctx.getImageData(0 * resolutionMultiplier, 0 * resolutionMultiplier, 8 * resolutionMultiplier, 8 * resolutionMultiplier);
+      let headData_2 = ctx.getImageData(24 * resolutionMultiplier, 0 * resolutionMultiplier, 16 * resolutionMultiplier, 8 * resolutionMultiplier);
+      let headData_3 = ctx.getImageData(56 * resolutionMultiplier, 0 * resolutionMultiplier, 8 * resolutionMultiplier, 8 * resolutionMultiplier);
+
+      // let handData = ctx.getImageData(50 * resolutionMultiplier, 16 * resolutionMultiplier, 2 * resolutionMultiplier, 4 * resolutionMultiplier);
+      // let armData = ctx.getImageData(54 * resolutionMultiplier, 20 * resolutionMultiplier, 2 * resolutionMultiplier, 12 * resolutionMultiplier);
+
+      for (let i = 0; i < headData_1.data.length; i += 4) {
+        if (headData_1.data[i + 3] > 0) {
+          resolve(true)
+        }
+      }
+
+      for (let i = 0; i < headData_2.data.length; i += 4) {
+        if (headData_2.data[i + 3] > 0) {
+          resolve(true)
+        }
+      }
+
+      resolve(false)
     };
   })
 }
