@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
+import { ref, reactive, onBeforeMount } from 'vue'
 import JSZip from 'jszip';
 import FileSaver from 'file-saver';
 import { v4 as uuidv4 } from 'uuid';
@@ -47,21 +47,33 @@ let partnerArt = reactive({}) as marketImage
 
 const pack_name = ref("Skinpack")
 const pack_version = ref("1.0.0")
+const keyArtInput = ref(null)
 let isPackaging = ref(false)
 let drag = ref(false)
 let modelViewOpen = ref(false)
 let modelViewSkin = ref("")
 let modelViewType = ref("")
 
+
 let skins = reactive<Array<skin>>([])
 let storeImages = reactive<Array<marketImage>>([])
 let inputImages = reactive<Array<File>>([])
+
+onBeforeMount(async () => {
+  var storedArt = localStorage.getItem('partner_art');
+  if (storedArt) {
+    var partnerArtImg = JSON.parse(storedArt);
+    partnerArtImg.file = dataURLtoFile(partnerArtImg.url, partnerArtImg.fileName);
+    Object.assign(partnerArt, partnerArtImg);
+  }
+
+})
 
 async function packageSkins() {
   try {
     isPackaging.value = true;
     let content = await generateZip()
-    FileSaver.saveAs(content, `${pack_name.value.replaceAll(" ", "")}.zip`);
+    FileSaver.saveAs(content, `${pack_name.value.replaceAll(" ", "")}_${pack_version.value}.zip`);
     isPackaging.value = false;
   } catch (error) {
     console.log(error);
@@ -73,9 +85,10 @@ function generateZip() {
   return new Promise<Blob>(async (resolve, reject) => {
     try {
       let ver_digits = pack_version.value.split(".").map((item) => {
-          return parseInt(item, 10);
+        return parseInt(item, 10);
       });
-      let packNameProccesed = pack_name.value.trim().replaceAll(" ", "");
+      let packNameProccesed = pack_name.value.trim().replace(/([^\w]| )/g, "");
+      
       let langFileContent = `skinpack.${packNameProccesed}=${pack_name.value}`;
       let skinsJsonContent: skinsJson = {
         localization_name: packNameProccesed,
@@ -127,7 +140,8 @@ function generateZip() {
 }
 
 async function sortImages(event: Event) {
-  const target = (<HTMLInputElement>event.target)
+  const target = (<HTMLInputElement>event.target);
+
   let entries: File[] = []
   if (target && target.files) {
     try {
@@ -158,18 +172,11 @@ async function sortImages(event: Event) {
           let size = await getImgSize(imgUrl)
           storeImages.push({
             file: val,
-            fileName: val.name,
+            fileName: val.name.replace(/\.[^/.]+$/, ""),
             url: imgUrl,
             w: size.width,
             h: size.height
           })
-          if (size.width == 800 && size.height == 450) {
-            // keyArt.file = val, 
-            //   keyArt.fileName = val.name,
-            //   keyArt.url = imgUrl
-          } else if (size.width == 1920 && size.height == 1080) {
-            // console.log(val);
-          }
         }
       }
       inputImages = [];
@@ -236,6 +243,72 @@ function getSkinType(imageUrl: string): Promise<"custom" | "customSlim"> {
   })
 }
 
+function checkGhostPixels(imageUrl: string): Promise<boolean> {
+  return new Promise(async (resolve, reject) => {
+    let img = new (window as any).Image();
+    img.crossOrigin = `Anonymous`;
+
+    img.src = imageUrl;
+    img.onload = function () {
+
+      let canvas = document.getElementById("myCanvas") as HTMLCanvasElement;
+      canvas.width = img.width;
+      canvas.height = img.height;
+      let ctx: CanvasRenderingContext2D = canvas.getContext(
+        "2d"
+      ) as CanvasRenderingContext2D;
+      ctx.drawImage(img, 0, 0);
+
+      let resolutionMultiplier = img.height / 64;
+      let headData_1 = ctx.getImageData(0 * resolutionMultiplier, 0 * resolutionMultiplier, 8 * resolutionMultiplier, 8 * resolutionMultiplier);
+      let headData_2 = ctx.getImageData(24 * resolutionMultiplier, 0 * resolutionMultiplier, 16 * resolutionMultiplier, 8 * resolutionMultiplier);
+      let headData_3 = ctx.getImageData(56 * resolutionMultiplier, 0 * resolutionMultiplier, 8 * resolutionMultiplier, 8 * resolutionMultiplier);
+
+      // let handData = ctx.getImageData(50 * resolutionMultiplier, 16 * resolutionMultiplier, 2 * resolutionMultiplier, 4 * resolutionMultiplier);
+      // let armData = ctx.getImageData(54 * resolutionMultiplier, 20 * resolutionMultiplier, 2 * resolutionMultiplier, 12 * resolutionMultiplier);
+
+      for (let i = 0; i < headData_1.data.length; i += 4) {
+        if (headData_1.data[i + 3] > 0) {
+          resolve(true)
+        }
+      }
+
+      for (let i = 0; i < headData_2.data.length; i += 4) {
+        if (headData_2.data[i + 3] > 0) {
+          resolve(true)
+        }
+      }
+
+      resolve(false)
+    };
+  })
+}
+
+function resizeImg(imgFile: File, src: string, width: number, height: number): Promise<{ newImgFile: File, imgUrl: string }> {
+  return new Promise(async (resolve, reject) => {
+    const newImg = new Image();
+
+    newImg.onload = async function () {
+      var canvas = document.createElement("canvas");
+      var ctx = canvas.getContext("2d");
+      if (!ctx) return reject();
+      canvas.width = width;
+      canvas.height = height;
+
+      ctx.drawImage(newImg, 0, 0, width, height);
+      const dataUrl = canvas.toDataURL(imgFile.type);
+      const newImgBlob = await new Promise((resolve: BlobCallback) => {
+        canvas.toBlob(resolve, imgFile.type);
+      });
+      if (!newImgBlob) return reject();
+      var newImgFile = new File([newImgBlob], `resized_${imgFile.name}`, { type: imgFile.type });
+      resolve({ newImgFile: newImgFile, imgUrl: dataUrl });
+    };
+
+    newImg.src = src; // this must be done AFTER setting onload
+  })
+}
+
 function getImgSize(src: string): Promise<{ width: number, height: number }> {
   return new Promise(async (resolve, reject) => {
     const newImg = new Image();
@@ -258,26 +331,62 @@ function dragstart(event: DragEvent, item: marketImage) {
   }
 }
 
-function onDrop(event: DragEvent, imgType: string) {
+async function onDrop(event: DragEvent, imgType: string) {
   if (event.dataTransfer != null) {
-    let imgUrl = event.dataTransfer.getData("image/url")
-    let img = storeImages.find(img => img.url == imgUrl)
+    let imgUrl = event.dataTransfer.getData("image/url");
+    let img = storeImages.find(img => img.url == imgUrl);
+    if (!img && event.dataTransfer.files.length > 0) {
+      img = await fileToImg(event.dataTransfer.files[0]);
+    }
+
+    
 
     if (img != null) {
+      if (img.file.type != "image/jpeg" && img.file.type != "image/png") {
+        console.log(`Error: Image format not supported - ${img.file.type}`);
+        return;
+      }
+
       switch (imgType) {
         case "key_art":
-          if (img.w == 800 && img.h == 450 && img.file.type == "image/jpeg") {
+          if (img.w == 800 && img.h == 450) {
+            if (img.file.type != 'image/jpeg'){
+              let newImg = await changeImgFormat(img.file, img.url);
+              img.file = newImg.newImgFile;
+              img.url = newImg.imgUrl;
+            }
             Object.assign(keyArt, img)
           }
           break;
         case "key_art_hd":
-          if (img.w == 1920 && img.h == 1080 && img.file.type == "image/jpeg") {
-            Object.assign(keyArtHD, img)
+          if (img.w == 1920 && img.h == 1080) {
+            if (img.file.type != 'image/jpeg'){
+              let newImg = await changeImgFormat(img.file, img.url);
+              img.file = newImg.newImgFile;
+              img.url = newImg.imgUrl;
+            }
+            var scaled_image = await resizeImg(img.file, img.url, 800, 450);
+            var keyartImg = {
+              file: scaled_image.newImgFile,
+              fileName: scaled_image.newImgFile.name,
+              url: scaled_image.imgUrl,
+              w: 800,
+              h: 450
+            };
+            Object.assign(keyArt, keyartImg);
+            Object.assign(keyArtHD, img);
           }
           break;
         case "partner_art":
-          if (img.w == 1920 && img.h == 1080 && img.file.type == "image/jpeg") {
-            Object.assign(partnerArt, img)
+          if (img.w == 1920 && img.h == 1080) {
+            
+            if (img.file.type != 'image/jpeg'){
+              let newImg = await changeImgFormat(img.file, img.url);
+              img.file = newImg.newImgFile;
+              img.url = newImg.imgUrl;
+            }
+            Object.assign(partnerArt, img);
+            localStorage.setItem('partner_art', JSON.stringify(img))
           }
           break;
         default:
@@ -287,6 +396,144 @@ function onDrop(event: DragEvent, imgType: string) {
     }
   }
 
+}
+
+async function fileToImg(file: File): Promise<marketImage> {
+  return new Promise(async (resolve, reject) => {
+    try {
+      function readFile(file: File) {
+        return new Promise<string>((resolve, reject) => {
+          var fr = new FileReader();
+          fr.onload = () => {
+            resolve(String(fr.result));
+          };
+          fr.onerror = reject;
+          fr.readAsDataURL(file);
+        });
+      }
+
+      let imgUrl = await readFile(file)
+      let size = await getImgSize(imgUrl);
+      var img = {
+        file: file,
+        fileName: file.name,
+        url: imgUrl,
+        w: size.width,
+        h: size.height
+      };
+      resolve(img)
+
+    } catch (error) {
+      reject(error)
+    }
+  })
+}
+
+function changeImgFormat(file: File, fileSrc: string, type: string = 'image/jpeg'): Promise<{newImgFile: File, imgUrl: string}> {
+  return new Promise(async (resolve, reject) => {
+    const newImg = new Image();
+
+    newImg.onload = async function () {
+      var canvas = document.createElement("canvas");
+      var ctx = canvas.getContext("2d");
+      if (!ctx) return reject();
+      canvas.width = newImg.width;
+      canvas.height = newImg.height;
+      ctx.drawImage(newImg, 0, 0);
+
+      const dataUrl = canvas.toDataURL(type);
+      const newImgBlob = await new Promise((resolve: BlobCallback) => {
+        canvas.toBlob(resolve,type);
+      });
+      if (!newImgBlob) return reject();
+      var newImgFile = new File([newImgBlob], `resized_${file.name}`, { type: type });
+      resolve({ newImgFile: newImgFile, imgUrl: dataUrl });
+    };
+
+    newImg.src = fileSrc; // this must be done AFTER setting onload
+  })
+}
+
+async function handleFileChange(event: Event, inputType: string) {
+  const target = (<HTMLInputElement>event.target)
+
+  let entries: File[] = []
+  if (target && target.files) {
+    try {
+      function readFile(file: File) {
+        return new Promise<string>((resolve, reject) => {
+          var fr = new FileReader();
+          fr.onload = () => {
+            resolve(String(fr.result));
+          };
+          fr.onerror = reject;
+          fr.readAsDataURL(file);
+        });
+      }
+
+      entries = Object.values(target.files);
+      for (const val of entries) {
+        let imgUrl = await readFile(val)
+        let size = await getImgSize(imgUrl);
+        switch (inputType) {
+          case 'key_art_hd':
+            if (size.width != 1920 || size.height != 1080) break
+            var keyartHDImg = {
+              file: val,
+              fileName: val.name,
+              url: imgUrl,
+              w: size.width,
+              h: size.height
+            };
+            Object.assign(keyArtHD, keyartHDImg);
+
+            var scaled_image = await resizeImg(keyartHDImg.file, keyartHDImg.url, 800, 450);
+            var keyartImg = {
+              file: scaled_image.newImgFile,
+              fileName: scaled_image.newImgFile.name,
+              url: scaled_image.imgUrl,
+              w: 800,
+              h: 450
+            };
+            Object.assign(keyArt, keyartImg);
+            break;
+          case 'partner_art':
+            if (size.width != 1920 || size.height != 1080) break
+            var partnerImg = {
+              file: val,
+              fileName: val.name,
+              url: imgUrl,
+              w: size.width,
+              h: size.height
+            };
+            Object.assign(partnerArt, partnerImg);
+            break;
+
+          default:
+            break;
+        }
+      }
+    } catch (error) {
+      console.error(error);
+
+    }
+  }
+}
+
+function dataURLtoFile(dataurl: string, filename: string) {
+  var arr = dataurl.split(',');
+  
+  if (arr.length > 0 && arr[0] != null) {
+    var mimeRaw = arr[0].match(/:(.*?);/)
+    var mime = mimeRaw != null && mimeRaw.length > 1? mimeRaw[1] : '' ;
+  } else return {}
+  var bstr = atob(arr[arr.length - 1]);
+  var n = bstr.length;
+  var u8arr = new Uint8Array(n);
+  while (n--) {
+    u8arr[n] = bstr.charCodeAt(n);
+  }
+  return new File([u8arr], filename, { type: mime });
 }
 
 function showModelView(skin: skin) {
@@ -304,26 +551,24 @@ function removeSkin(skin: skin) {
 <template>
   <div class="flex-grow-1">
     <canvas hidden id="myCanvas"></canvas>
-    <model-viewer-dialog eager :show="modelViewOpen" @update:show="val => modelViewOpen = val"
-      :skin="modelViewSkin"
-      :type="modelViewType"
-      ></model-viewer-dialog>
+    <model-viewer-dialog eager :show="modelViewOpen" @update:show="val => modelViewOpen = val" :skin="modelViewSkin"
+      :type="modelViewType"></model-viewer-dialog>
     <v-row>
       <v-col>
         <h1>Skin Packager</h1>
       </v-col>
-      
+
     </v-row>
     <v-row>
-      <v-col >
-        <v-text-field  variant="outlined" label="Skinpack name" v-model="pack_name"></v-text-field>
+      <v-col>
+        <v-text-field variant="outlined" label="Skinpack name" v-model.trim="pack_name"></v-text-field>
       </v-col>
-      <v-col >
-        <v-text-field variant="outlined" label="Version" v-model="pack_version"></v-text-field>
+      <v-col>
+        <v-text-field variant="outlined" label="Version" v-model.trim="pack_version"></v-text-field>
       </v-col>
-      <v-col >
+      <v-col>
         <v-file-input variant="outlined" label="Images" clearable multiple accept="image/png, image/jpeg"
-          v-model="inputImages" @change="sortImages"></v-file-input>
+          v-model="inputImages" @change="sortImages($event)"></v-file-input>
       </v-col>
     </v-row>
     <v-row>
@@ -334,7 +579,7 @@ function removeSkin(skin: skin) {
         </v-card>
       </v-col>
     </v-row>
-    <v-row v-if="storeImages.length > 0" class="mx-10">
+    <v-row class="mx-10">
       <v-col>
         <v-card @drop="onDrop($event, 'key_art')" @dragenter.prevent @dragover.prevent>
           <v-card-title>Store Art</v-card-title>
@@ -343,12 +588,14 @@ function removeSkin(skin: skin) {
             <v-card class="flex-grow-1" v-if="keyArt.url">
               <v-img :src="keyArt.url"></v-img>
             </v-card>
-            <div class="drop-area flex-grow-1 pa-10 " v-else>Drag an image here</div>
+            <div class="drop-area flex-grow-1 pa-10 " v-else>Auto-generated</div>
           </v-card-text>
         </v-card>
       </v-col>
       <v-col>
-        <v-card @drop="onDrop($event, 'key_art_hd')" @dragenter.prevent @dragover.prevent>
+        <input ref="keyArtInput" class="d-none" type="file" accept="image/png, image/jpeg"
+          @change="handleFileChange($event, 'key_art_hd')" />
+        <v-card @drop.prevent="onDrop($event, 'key_art_hd')" @dragenter.prevent @dragover.prevent>
           <v-card-title>Marketing Art</v-card-title>
           <v-card-subtitle>1920x1080</v-card-subtitle>
           <v-card-text class="d-flex">
@@ -360,7 +607,9 @@ function removeSkin(skin: skin) {
         </v-card>
       </v-col>
       <v-col>
-        <v-card @drop="onDrop($event, 'partner_art')" @dragenter.prevent @dragover.prevent>
+        <input ref="partnerArtInput" class="d-none" type="file" accept="image/png, image/jpeg"
+          @change="handleFileChange($event, 'partner_art')" />
+        <v-card @drop.prevent="onDrop($event, 'partner_art')" @dragenter.prevent @dragover.prevent>
           <v-card-title>Partner Art</v-card-title>
           <v-card-subtitle>1920x1080</v-card-subtitle>
           <v-card-text class="d-flex">
@@ -377,16 +626,16 @@ function removeSkin(skin: skin) {
         <draggable class="d-flex align-center justify-center row flex-wrap" ghost-class="moving-card" :list="skins"
           group="people" :animation="200" @start="drag = true" @end="drag = false" item-key="element.url">
           <template #item="{ element }">
-              <v-card rounded="lg" class="flex-grow-0 ma-5" :key="element.url">
-                <v-card-title class="d-flex align-center justify-space-between">
-                  {{ (skins.indexOf(element) + 1) + "_" + element.type }}
-                  <v-btn variant="flat" icon="mdi-magnify-plus" @click="showModelView(element)"></v-btn>
-                  <v-btn variant="flat" icon="mdi-delete" @click="removeSkin(element)"></v-btn>
-                </v-card-title>
-                <v-text-field label="Character name" v-model="element.name"></v-text-field>
-                
-                <model-view v-bind:type="element.type" v-bind:skin="element.url"></model-view >
-              </v-card>
+            <v-card rounded="lg" class="flex-grow-0 ma-5" :key="element.url">
+              <v-card-title class="d-flex align-center justify-space-between">
+                {{ (skins.indexOf(element) + 1) + "_" + element.type }}
+                <v-btn variant="flat" icon="mdi-magnify-plus" @click="showModelView(element)"></v-btn>
+                <v-btn variant="flat" icon="mdi-delete" @click="removeSkin(element)"></v-btn>
+              </v-card-title>
+              <v-text-field label="Character name" v-model="element.name"></v-text-field>
+
+              <model-view v-bind:type="element.type" v-bind:skin="element.url"></model-view>
+            </v-card>
           </template>
         </draggable>
       </v-col>
