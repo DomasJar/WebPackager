@@ -9,4 +9,11 @@ export default defineConfig({
     vue(),
     vuetify({ autoImport: true, styles: { configFile: 'src/styles/settings.scss' } }), // Enabled by default
   ],
+  css: {
+    preprocessorOptions: {
+      scss: {
+        api: 'modern-compiler' // or "modern"
+      }
+    }
+  }
 })
