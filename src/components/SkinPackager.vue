@@ -69,6 +69,7 @@ let drag = ref(false)
 let modelViewOpen = ref(false)
 let modelViewSkin = ref("")
 let modelViewType = ref("")
+let startNewPackDialogOpen = ref(false)
 
 
 let skins = reactive<Array<skin>>([])
@@ -150,8 +151,12 @@ async function restorePackDraft() {
   }
 }
 
-async function startNewPack() {
-  if (!confirm('Start a new pack? This clears the current pack name, version, skins, and Store/Marketing Art (Partner Art is kept).')) return;
+function requestStartNewPack() {
+  startNewPackDialogOpen.value = true;
+}
+
+async function confirmStartNewPack() {
+  startNewPackDialogOpen.value = false;
   try {
     await clearPackDraft();
     pack_name.value = 'Skinpack';
@@ -675,10 +680,22 @@ function removeSkin(skin: skin) {
     <canvas hidden id="myCanvas"></canvas>
     <model-viewer-dialog eager :show="modelViewOpen" @update:show="val => modelViewOpen = val" :skin="modelViewSkin"
       :type="modelViewType"></model-viewer-dialog>
+    <v-dialog v-model="startNewPackDialogOpen" width="500">
+      <v-card>
+        <v-card-title>Start New Pack</v-card-title>
+        <v-card-text>
+          Start a new pack? This clears the current pack name, version, skins, and Store/Marketing Art (Partner Art is kept).
+        </v-card-text>
+        <v-card-actions class="justify-end">
+          <v-btn variant="text" @click="startNewPackDialogOpen = false">Cancel</v-btn>
+          <v-btn variant="flat" color="primary" @click="confirmStartNewPack">Start New Pack</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
     <v-row>
       <v-col class="d-flex align-center justify-space-between">
         <h1>Skin Packager</h1>
-        <v-btn variant="outlined" @click="startNewPack">Start New Pack</v-btn>
+        <v-btn variant="outlined" @click="requestStartNewPack">Start New Pack</v-btn>
       </v-col>
 
     </v-row>
