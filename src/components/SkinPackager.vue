@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, reactive, onBeforeMount } from 'vue'
+import { ref, reactive, onBeforeMount, watch } from 'vue'
 import JSZip from 'jszip';
 import FileSaver from 'file-saver';
 import { v4 as uuidv4 } from 'uuid';
@@ -7,6 +7,16 @@ import { v4 as uuidv4 } from 'uuid';
 import draggable from 'vuedraggable';
 import ModelViewerDialog from './ModelViewerDialog.vue'
 import ModelView from './ModelView.vue'
+import {
+  getPartnerArtHistory,
+  addPartnerArtToHistory,
+  touchPartnerArtHistory,
+  removePartnerArtFromHistory,
+  savePackDraft,
+  loadPackDraft,
+  clearPackDraft,
+  type PartnerArtHistoryEntry,
+} from '../db'
 
 interface marketImage {
   fileName: string,
@@ -14,6 +24,10 @@ interface marketImage {
   file: File
   w: number,
   h: number
+}
+
+interface partnerArtHistoryItem extends PartnerArtHistoryEntry {
+  url: string
 }
 
 interface skinsJson {
@@ -44,6 +58,8 @@ interface skin { name: string, type: "custom" | "customSlim", fileName: string, 
 let keyArt = reactive({}) as marketImage
 let keyArtHD = reactive({}) as marketImage
 let partnerArt = reactive({}) as marketImage
+let partnerArtHistory = reactive<Array<partnerArtHistoryItem>>([])
+let activePartnerArtId = ref<string | null>(null)
 
 const pack_name = ref("Skinpack")
 const pack_version = ref("1.0.0")
@@ -60,14 +76,144 @@ let storeImages = reactive<Array<marketImage>>([])
 let inputImages = reactive<Array<File>>([])
 
 onBeforeMount(async () => {
-  var storedArt = localStorage.getItem('partner_art');
-  if (storedArt) {
-    var partnerArtImg = JSON.parse(storedArt);
-    partnerArtImg.file = dataURLtoFile(partnerArtImg.url, partnerArtImg.fileName);
-    Object.assign(partnerArt, partnerArtImg);
+  await restorePackDraft();
+
+  await refreshPartnerArtHistory();
+  if (partnerArtHistory.length > 0) {
+    await applyPartnerArtFromHistory(partnerArtHistory[0]);
   }
 
+  watch(
+    () => ({ name: pack_name.value, version: pack_version.value, skins, storeImages, keyArtHD }),
+    () => debouncedSaveDraft(),
+    { deep: true }
+  );
 })
+
+function debounce<T extends (...args: any[]) => void>(fn: T, delayMs: number): T {
+  let timeout: ReturnType<typeof setTimeout>;
+  return ((...args: any[]) => {
+    clearTimeout(timeout);
+    timeout = setTimeout(() => fn(...args), delayMs);
+  }) as T;
+}
+
+async function saveDraftNow() {
+  try {
+    await savePackDraft({
+      packName: pack_name.value,
+      packVersion: pack_version.value,
+      skins: skins.map((s) => ({ name: s.name, type: s.type, fileName: s.fileName, blob: s.file })),
+      storeImages: storeImages.map((img) => ({ fileName: img.fileName, blob: img.file, w: img.w, h: img.h })),
+      keyArtHD: keyArtHD.file ? { fileName: keyArtHD.fileName, blob: keyArtHD.file, w: keyArtHD.w, h: keyArtHD.h } : null,
+    });
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+const debouncedSaveDraft = debounce(saveDraftNow, 500);
+
+async function restorePackDraft() {
+  try {
+    const draft = await loadPackDraft();
+    if (!draft) return;
+
+    pack_name.value = draft.packName;
+    pack_version.value = draft.packVersion;
+
+    skins.push(...draft.skins.map((s) => ({
+      name: s.name,
+      type: s.type,
+      fileName: s.fileName,
+      file: s.blob as File,
+      url: URL.createObjectURL(s.blob),
+      paid: true as const,
+    })));
+
+    storeImages.push(...draft.storeImages.map((img) => ({
+      fileName: img.fileName,
+      file: img.blob as File,
+      url: URL.createObjectURL(img.blob),
+      w: img.w,
+      h: img.h,
+    })));
+
+    if (draft.keyArtHD) {
+      const url = URL.createObjectURL(draft.keyArtHD.blob);
+      Object.assign(keyArtHD, { file: draft.keyArtHD.blob as File, fileName: draft.keyArtHD.fileName, url, w: draft.keyArtHD.w, h: draft.keyArtHD.h });
+      const scaled = await resizeImg(keyArtHD.file, url, 800, 450);
+      Object.assign(keyArt, { file: scaled.newImgFile, fileName: scaled.newImgFile.name, url: scaled.imgUrl, w: 800, h: 450 });
+    }
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+async function startNewPack() {
+  if (!confirm('Start a new pack? This clears the current pack name, version, skins, and Store/Marketing Art (Partner Art is kept).')) return;
+  try {
+    await clearPackDraft();
+    pack_name.value = 'Skinpack';
+    pack_version.value = '1.0.0';
+    skins.splice(0, skins.length);
+    storeImages.splice(0, storeImages.length);
+    Object.assign(keyArt, { file: undefined, fileName: '', url: '', w: undefined, h: undefined });
+    Object.assign(keyArtHD, { file: undefined, fileName: '', url: '', w: undefined, h: undefined });
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+async function refreshPartnerArtHistory() {
+  try {
+    partnerArtHistory.forEach((entry) => URL.revokeObjectURL(entry.url));
+    const entries = await getPartnerArtHistory();
+    const withUrls = entries.map((entry) => ({ ...entry, url: URL.createObjectURL(entry.blob) }));
+    partnerArtHistory.splice(0, partnerArtHistory.length, ...withUrls);
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+async function applyNewPartnerArt(file: File, w: number, h: number) {
+  try {
+    await addPartnerArtToHistory(file, w, h);
+    await refreshPartnerArtHistory();
+    const active = partnerArtHistory[0];
+    if (!active) return;
+    Object.assign(partnerArt, { file: active.blob as File, fileName: active.fileName, url: active.url, w: active.w, h: active.h });
+    activePartnerArtId.value = active.id;
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+async function applyPartnerArtFromHistory(entry: partnerArtHistoryItem) {
+  try {
+    await touchPartnerArtHistory(entry.id);
+    await refreshPartnerArtHistory();
+    const active = partnerArtHistory.find((e) => e.id === entry.id);
+    if (!active) return;
+    Object.assign(partnerArt, { file: active.blob as File, fileName: active.fileName, url: active.url, w: active.w, h: active.h });
+    activePartnerArtId.value = active.id;
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+async function removePartnerArtHistoryEntry(entry: partnerArtHistoryItem) {
+  try {
+    await removePartnerArtFromHistory(entry.id);
+    if (activePartnerArtId.value === entry.id) {
+      Object.assign(partnerArt, { file: undefined, fileName: '', url: '', w: undefined, h: undefined });
+      activePartnerArtId.value = null;
+    }
+    await refreshPartnerArtHistory();
+  } catch (error) {
+    console.error(error);
+  }
+}
 
 async function packageSkins() {
   try {
@@ -379,14 +525,13 @@ async function onDrop(event: DragEvent, imgType: string) {
           break;
         case "partner_art":
           if (img.w == 1920 && img.h == 1080) {
-            
+
             if (img.file.type != 'image/jpeg'){
               let newImg = await changeImgFormat(img.file, img.url);
               img.file = newImg.newImgFile;
               img.url = newImg.imgUrl;
             }
-            Object.assign(partnerArt, img);
-            localStorage.setItem('partner_art', JSON.stringify(img))
+            await applyNewPartnerArt(img.file, img.w, img.h);
           }
           break;
         default:
@@ -499,14 +644,7 @@ async function handleFileChange(event: Event, inputType: string) {
             break;
           case 'partner_art':
             if (size.width != 1920 || size.height != 1080) break
-            var partnerImg = {
-              file: val,
-              fileName: val.name,
-              url: imgUrl,
-              w: size.width,
-              h: size.height
-            };
-            Object.assign(partnerArt, partnerImg);
+            await applyNewPartnerArt(val, size.width, size.height);
             break;
 
           default:
@@ -518,22 +656,6 @@ async function handleFileChange(event: Event, inputType: string) {
 
     }
   }
-}
-
-function dataURLtoFile(dataurl: string, filename: string) {
-  var arr = dataurl.split(',');
-  
-  if (arr.length > 0 && arr[0] != null) {
-    var mimeRaw = arr[0].match(/:(.*?);/)
-    var mime = mimeRaw != null && mimeRaw.length > 1? mimeRaw[1] : '' ;
-  } else return {}
-  var bstr = atob(arr[arr.length - 1]);
-  var n = bstr.length;
-  var u8arr = new Uint8Array(n);
-  while (n--) {
-    u8arr[n] = bstr.charCodeAt(n);
-  }
-  return new File([u8arr], filename, { type: mime });
 }
 
 function showModelView(skin: skin) {
@@ -554,8 +676,9 @@ function removeSkin(skin: skin) {
     <model-viewer-dialog eager :show="modelViewOpen" @update:show="val => modelViewOpen = val" :skin="modelViewSkin"
       :type="modelViewType"></model-viewer-dialog>
     <v-row>
-      <v-col>
+      <v-col class="d-flex align-center justify-space-between">
         <h1>Skin Packager</h1>
+        <v-btn variant="outlined" @click="startNewPack">Start New Pack</v-btn>
       </v-col>
 
     </v-row>
@@ -610,7 +733,29 @@ function removeSkin(skin: skin) {
         <input ref="partnerArtInput" class="d-none" type="file" accept="image/png, image/jpeg"
           @change="handleFileChange($event, 'partner_art')" />
         <v-card @drop.prevent="onDrop($event, 'partner_art')" @dragenter.prevent @dragover.prevent>
-          <v-card-title>Partner Art</v-card-title>
+          <v-card-title class="d-flex align-center justify-space-between">
+            Partner Art
+            <v-menu v-if="partnerArtHistory.length">
+              <template #activator="{ props }">
+                <v-btn variant="flat" icon="mdi-history" size="small" v-bind="props" title="Partner Art History"></v-btn>
+              </template>
+              <v-list>
+                <v-list-item v-for="entry in partnerArtHistory" :key="entry.id"
+                  :active="entry.id === activePartnerArtId" @click="applyPartnerArtFromHistory(entry)">
+                  <template #prepend>
+                    <v-avatar rounded size="40" class="me-3">
+                      <v-img :src="entry.url"></v-img>
+                    </v-avatar>
+                  </template>
+                  <v-list-item-title>{{ entry.fileName }}</v-list-item-title>
+                  <template #append>
+                    <v-btn variant="flat" icon="mdi-delete" size="small"
+                      @click.stop="removePartnerArtHistoryEntry(entry)"></v-btn>
+                  </template>
+                </v-list-item>
+              </v-list>
+            </v-menu>
+          </v-card-title>
           <v-card-subtitle>1920x1080</v-card-subtitle>
           <v-card-text class="d-flex">
             <v-card class="flex-grow-1" v-if="partnerArt.url">
