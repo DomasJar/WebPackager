@@ -15,7 +15,7 @@
     "jszip": "^3.10.1",
     "three": "0.134",
     "troisjs": "^0.3.4",
-    "uuid": "^9.0.0",
+    "uuid": "^11.1.1",
     "vite-plugin-vuetify": "^1.0.2",
     "vue": "^3.5.13",
     "vue-router": "4",
@@ -26,7 +26,6 @@
     "@mdi/font": "^7.1.96",
     "@types/file-saver": "^2.0.5",
     "@types/three": "^0.149.0",
-    "@types/uuid": "^9.0.0",
     "@vitejs/plugin-vue": "^4.0.0",
     "gh-pages": "^5.0.0",
     "sass": "^1.83.0",
@@ -34,5 +33,25 @@
     "vite": "^4.1.5",
     "vite-plugin-compression": "^0.5.1",
     "vue-tsc": "^2.1.10"
+  },
+  "overrides": {
+    "@grpc/grpc-js": "^1.9.16",
+    "protobufjs": "^7.6.5",
+    "websocket-driver": "^0.7.5",
+    "immutable": "^5.1.9",
+    "rollup": "^3.30.0",
+    "postcss": "^8.5.25",
+    "picomatch": "^2.3.2",
+    "brace-expansion": "^2.1.4"
+  },
+  "resolutions": {
+    "@grpc/grpc-js": "^1.9.16",
+    "protobufjs": "^7.6.5",
+    "websocket-driver": "^0.7.5",
+    "immutable": "^5.1.9",
+    "rollup": "^3.30.0",
+    "postcss": "^8.5.25",
+    "picomatch": "^2.3.2",
+    "brace-expansion": "^2.1.4"
   }
 }
